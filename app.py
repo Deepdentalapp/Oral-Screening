@@ -13,11 +13,11 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # Input: Patient name
 patient_name = st.text_input("Enter Patient Name")
 
-st.markdown("###  Upload at least 6 oral photographs (palate, tongue, lips etc)")
-st.info("Please upload clear JPG/PNG images under 2MB each.")
+st.markdown("### Upload at least 6 oral photographs (palate, tongue, lips, etc)")
+st.info("Upload JPG/PNG images. File size should be less than 2 MB each.")
 
 uploaded_images = []
-for i in range(1, 9):  # allow up to 8 images
+for i in range(1, 9):  # Allow up to 8 images
     file = st.file_uploader(f"Upload Oral Photograph {i}", type=["jpg", "jpeg", "png"], key=f"img_{i}")
     if file is not None:
         try:
@@ -63,7 +63,7 @@ def generate_pdf(patient_name, results):
     ]
     pdf.set_font("Arial", "", 12)
     for tooth, issue, plan in diagnosis_data:
-        pdf.cell(0, 10, f"{tooth}: {issue} → Treatment: {plan}", ln=True)
+        pdf.cell(0, 10, f"{tooth}: {issue} - Treatment: {plan}", ln=True)
 
     # Add uploaded photos
     for label, img_path in results:
@@ -75,18 +75,17 @@ def generate_pdf(patient_name, results):
         except RuntimeError:
             pdf.cell(0, 10, f"Could not load image: {label}", ln=True)
 
-    # Legend
+    # Legend (No emojis)
     pdf.ln(5)
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, "Legend:", ln=True)
     pdf.set_font("Arial", "", 12)
     pdf.multi_cell(0, 8,
-        "Brown Area: Stains\n"
-        "Dark Area: Calculus\n"
-        "Blue Label: Broken Tooth\n"
-        "Missing Tooth\n"
-        "Red Circle: Oral Ulcer\n"
-        "Green Circle: Oral Lesion"
+        "Red Area: Oral Ulcer\n"
+        "Green Area: Oral Lesion\n"
+        "Blue: Broken Tooth\n"
+        "X mark: Missing Tooth\n"
+        "Tooth Number: For reference"
     )
 
     # Disclaimer
@@ -107,6 +106,6 @@ if len(uploaded_images) >= 6:
     if st.button("Generate Report"):
         pdf_path = generate_pdf(patient_name, uploaded_images)
         with open(pdf_path, "rb") as f:
-            st.download_button(" Download AffoDent Report", f, file_name="AffoDent_Oral_Report.pdf")
+            st.download_button("Download AffoDent Report", f, file_name="AffoDent_Oral_Report.pdf")
 else:
     st.warning("Please upload at least 6 oral cavity photos to proceed.")

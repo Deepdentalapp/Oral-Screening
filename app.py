@@ -5,7 +5,7 @@ import os
 
 # Page setup
 st.set_page_config(page_title="AffoDent Oral Screening App", layout="centered")
-st.title("🦷 AffoDent Oral Screening App")
+st.title("AffoDent Oral Screening App")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -13,7 +13,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # Patient Name
 patient_name = st.text_input("Enter Patient Name")
 
-# Upload images one by one
+# Upload images
 image_labels = [
     "1. Frontal View (Front Teeth)",
     "2. Right Lateral View",
@@ -81,10 +81,10 @@ def generate_pdf(patient_name, image_infos):
     pdf.cell(0, 10, "Legend:", ln=True)
     pdf.set_font("Arial", "", 11)
     pdf.multi_cell(0, 8,
-        "🔴 Red Circle: Oral Ulcer\n"
-        "🟢 Green Circle: Oral Lesion\n"
-        "🔵 Blue Box: Broken Tooth\n"
-        "❌ X: Missing Tooth"
+        "Red Circle: Oral Ulcer\n"
+        "Green Circle: Oral Lesion\n"
+        "Blue Box: Broken Tooth\n"
+        "X: Missing Tooth"
     )
 
     # Disclaimer
@@ -105,6 +105,6 @@ if len(uploaded_images) >= 6:
     if st.button("Generate Report"):
         pdf_path = generate_pdf(patient_name, uploaded_images)
         with open(pdf_path, "rb") as f:
-            st.download_button("📄 Download AffoDent Report", f, file_name="AffoDent_Report.pdf")
+            st.download_button("Download AffoDent Report", f, file_name="AffoDent_Report.pdf")
 else:
     st.warning("Please upload at least 6 images to proceed.")

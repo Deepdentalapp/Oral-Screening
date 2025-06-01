@@ -1,84 +1,81 @@
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
-import os
 from fpdf import FPDF
-
-# Create upload directory
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+import os
 
 st.set_page_config(page_title="AffoDent Oral Screening App", layout="centered")
 st.title("🦷 AffoDent Oral Screening App")
-st.caption("AI-based simulated dental diagnosis with annotated report.")
 
-uploaded_file = st.file_uploader("Upload an intraoral image", type=["jpg", "jpeg", "png"])
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-def simulate_diagnosis(image):
+# Input: Patient name
+patient_name = st.text_input("Enter Patient Name")
+
+# Image inputs
+image_labels = [
+    "1. Front tooth view (Frontal)",
+    "2. Right side (Right lateral)",
+    "3. Left side (Left lateral)",
+    "4. Upper tooth (Occlusal)",
+    "5. Lower tooth (Occlusal)",
+    "6. Tongue",
+    "7. Oral cavity including Palate"
+]
+
+uploaded_images = []
+for label in image_labels:
+    uploaded_images.append(st.file_uploader(f"Upload image - {label}", type=["jpg", "jpeg", "png"], key=label))
+
+def annotate_image(image, label_texts):
     draw = ImageDraw.Draw(image)
     font = ImageFont.load_default()
-    findings = []
+    for item in label_texts:
+        x, y, label, color = item
+        draw.ellipse((x, y, x+40, y+40), outline=color, width=3)
+        draw.text((x, y+45), label, fill="white", font=font)
+    return image
 
-    # Simulated detections
-    # Carious tooth - Tooth 16
-    draw.ellipse((100, 100, 140, 140), outline="red", width=3)
-    draw.text((100, 145), "Tooth 16", fill="white", font=font)
-    findings.append(("Tooth 16", "Carious", "Restore with composite or GIC"))
-
-    # Broken tooth - Tooth 21
-    draw.rectangle((200, 200, 240, 240), outline="blue", width=3)
-    draw.text((200, 245), "Tooth 21", fill="white", font=font)
-    findings.append(("Tooth 21", "Broken", "Crown or extraction"))
-
-    # Missing tooth - Tooth 11
-    draw.line((300, 300, 340, 340), fill="black", width=4)
-    draw.line((340, 300, 300, 340), fill="black", width=4)
-    draw.text((300, 345), "Tooth 11", fill="white", font=font)
-    findings.append(("Tooth 11", "Missing", "Implant or bridge"))
-
-    # Oral ulcer
-    draw.ellipse((400, 100, 440, 140), outline="red", width=3)
-    draw.text((400, 145), "Ulcer", fill="white", font=font)
-    findings.append(("Area near Tooth 13", "Oral Ulcer", "Consult for biopsy if persistent"))
-
-    # Oral lesion
-    draw.ellipse((100, 300, 140, 340), outline="green", width=3)
-    draw.text((100, 345), "Lesion", fill="white", font=font)
-    findings.append(("Area near Tooth 34", "Oral Lesion", "Requires clinical evaluation"))
-
-    return image, findings
-
-def generate_pdf_report(image, findings):
+def generate_pdf(patient_name, results):
     pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=10)
     pdf.add_page()
+
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, "AffoDent Oral Screening Report", ln=True, align="C")
 
     # Clinic info
     pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, 10, 
+    pdf.multi_cell(0, 8, 
+        f"Patient Name: {patient_name or 'N/A'}\n"
         "Clinic: AffoDent\n"
         "Address: House no 4, College Hostel Road, Panbazar, Guwahati, Assam 781001\n"
         "Doctor: Dr. Deep Sharma, MDS\n"
         "WhatsApp: https://wa.me/919864272102"
     )
 
+    # Diagnosis summary (simulated)
     pdf.ln(5)
     pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 10, "Diagnosis Summary", ln=True)
 
-    for tooth, issue, treatment in findings:
-        pdf.set_font("Arial", "", 12)
-        pdf.cell(0, 10, f"{tooth}: {issue} → Treatment: {treatment}", ln=True)
+    diagnosis_data = [
+        ("Tooth 16", "Carious", "Restore with composite or GIC"),
+        ("Tooth 21", "Broken", "Crown or extraction"),
+        ("Tooth 11", "Missing", "Implant or bridge"),
+        ("Area near Tooth 13", "Oral Ulcer", "Consult for biopsy if persistent"),
+        ("Area near Tooth 34", "Oral Lesion", "Requires clinical evaluation")
+    ]
+    pdf.set_font("Arial", "", 12)
+    for tooth, issue, plan in diagnosis_data:
+        pdf.cell(0, 10, f"{tooth}: {issue} → Treatment: {plan}", ln=True)
 
-    # Save annotated image
-    annotated_path = os.path.join(UPLOAD_DIR, "annotated.jpg")
-    image.save(annotated_path)
-
-    # Insert image
-    pdf.ln(5)
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, "Annotated Image", ln=True)
-    pdf.image(annotated_path, w=160)
+    # Annotated images
+    for idx, (label, image_path) in enumerate(results):
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, label, ln=True)
+        pdf.image(image_path, w=180)
 
     # Legend
     pdf.ln(5)
@@ -101,19 +98,38 @@ def generate_pdf_report(image, findings):
         "Please consult your family oral and dental surgeon for confirmation and treatment."
     )
 
-    # Save PDF
-    pdf_path = os.path.join(UPLOAD_DIR, "report.pdf")
-    pdf.output(pdf_path)
-    return pdf_path
+    output_path = os.path.join(UPLOAD_DIR, "affodent_report.pdf")
+    pdf.output(output_path)
+    return output_path
 
-if uploaded_file:
-    image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Uploaded Image", use_column_width=True)
-
-    annotated_image, findings = simulate_diagnosis(image)
-    st.image(annotated_image, caption="Annotated Image", use_column_width=True)
-
+if all(uploaded_images):
+    st.success("All images uploaded. Ready to generate report.")
     if st.button("Generate Report"):
-        report_path = generate_pdf_report(annotated_image, findings)
+        image_outputs = []
+        for i, uploaded_file in enumerate(uploaded_images):
+            image = Image.open(uploaded_file).convert("RGB")
+            label = image_labels[i]
+
+            # Simulated markups only on first image
+            if i == 0:
+                markups = [
+                    (100, 100, "Tooth 16", "red"),
+                    (200, 200, "Tooth 21", "blue"),
+                    (300, 300, "Tooth 11", "black"),
+                    (400, 100, "Ulcer", "red"),
+                    (100, 300, "Lesion", "green")
+                ]
+                annotated = annotate_image(image, markups)
+            else:
+                annotated = image
+
+            img_path = os.path.join(UPLOAD_DIR, f"image_{i+1}.jpg")
+            annotated.save(img_path)
+            image_outputs.append((label, img_path))
+            st.image(annotated, caption=label, use_column_width=True)
+
+        report_path = generate_pdf(patient_name, image_outputs)
         with open(report_path, "rb") as f:
-            st.download_button("📄 Download Report PDF", f, file_name="AffoDent_Report.pdf")
+            st.download_button("📄 Download Full Report", f, file_name="AffoDent_Report.pdf")
+else:
+    st.warning("Please upload all 7 required images to proceed.")

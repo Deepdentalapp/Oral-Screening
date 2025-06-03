@@ -1,111 +1,134 @@
 import streamlit as st
+import requests
 from PIL import Image
+from datetime import datetime
 from fpdf import FPDF
-import os
+import io
+import base64
 
-# Setup
-st.set_page_config(page_title="AffoDent Oral Screening App", layout="centered")
-st.title("AffoDent Oral Screening App")
+# ----------------------
+# Configuration
+# ----------------------
+ROBOFLOW_API_KEY = "yxVUJt7Trbkn6neMYEyB"
+MODEL_ID = "dental-lesion-detection-rf-4vstt"  # Replace with your model ID
+MODEL_VERSION = "1"
+INFERENCE_URL = f"https://detect.roboflow.com/{MODEL_ID}/{MODEL_VERSION}?api_key={ROBOFLOW_API_KEY}"
 
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# ----------------------
+# App Title
+# ----------------------
+st.set_page_config(page_title="AffoDent Oral Screening App")
+st.title("🦷 AffoDent Oral Screening App")
+st.markdown("##### By Dr. Deep Sharma, MDS - Panbazar, Guwahati")
 
-# Input: Patient name
-patient_name = st.text_input("Enter Patient Name")
+# ----------------------
+# Inputs
+# ----------------------
+with st.form("patient_form"):
+    st.subheader("📋 Patient Information")
+    name = st.text_input("Patient Name", max_chars=100)
+    age = st.text_input("Age")
+    sex = st.selectbox("Sex", ["Male", "Female", "Other"])
+    chief_complaint = st.text_area("Chief Complaint")
+    medical_history = st.text_area("Medical History")
 
-st.markdown("### Upload at least 6 oral photographs (palate, tongue, lips, etc)")
-st.info("Upload JPG/PNG images. File size should be less than 2 MB each.")
+    uploaded_image = st.file_uploader("Upload Intraoral Image (JPG/PNG)", type=["jpg", "jpeg", "png"])
+    logo_file = st.file_uploader("Upload Clinic Logo (optional)", type=["png", "jpg"])
 
-uploaded_images = []
-for i in range(1, 9):  # Allow up to 8 images
-    file = st.file_uploader(f"Upload Oral Photograph {i}", type=["jpg", "jpeg", "png"], key=f"img_{i}")
-    if file is not None:
-        try:
-            image = Image.open(file).convert("RGB")
-            label = f"Image {i}"
-            img_path = os.path.join(UPLOAD_DIR, f"{label.replace(' ', '_')}.jpg")
-            image.save(img_path)
-            uploaded_images.append((label, img_path))
-            st.image(image, caption=label, use_column_width=True)
-        except Exception as e:
-            st.error(f"Could not upload {label}: {e}")
+    submit_btn = st.form_submit_button("🩺 Analyze and Generate Report")
 
-# Function to generate PDF
-def generate_pdf(patient_name, results):
+# ----------------------
+# Inference
+# ----------------------
+def run_inference(image_bytes):
+    response = requests.post(
+        INFERENCE_URL,
+        files={"file": image_bytes},
+        data={"confidence": 0.4, "overlap": 0.3},
+    )
+    return response.json()
+
+# ----------------------
+# PDF Generator
+# ----------------------
+def generate_pdf(name, age, sex, complaint, history, result_json, input_image, logo_image=None):
     pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=10)
     pdf.add_page()
 
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "AffoDent Oral Screening Report", ln=True, align="C")
-
-    # Clinic Info
-    pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, 8,
-        f"Patient Name: {patient_name or 'N/A'}\n"
-        "Clinic: AffoDent\n"
-        "Address: House no 4, College Hostel Road, Panbazar, Guwahati, Assam 781001\n"
-        "Doctor: Dr. Deep Sharma, MDS\n"
-        "WhatsApp: https://wa.me/919864272102"
-    )
-
-    # Diagnosis Summary (Simulated)
-    pdf.ln(5)
+    # Add Logo
+    if logo_image:
+        logo_path = "/tmp/logo.png"
+        logo_image.save(logo_path)
+        pdf.image(logo_path, x=10, y=8, w=33)
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, "Diagnosis Summary", ln=True)
+    pdf.cell(200, 10, txt="AffoDent Panbazar Dental Clinic", ln=True, align="C")
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(200, 7, txt="House no 4, College Hostel Road, Panbazar, Guwahati, Assam 781001", ln=True, align="C")
+    pdf.cell(200, 7, txt="📞 WhatsApp: 9864272102 | 📧 Email: deep0701@gmail.com", ln=True, align="C")
+    pdf.ln(10)
 
-    diagnosis_data = [
-        ("Tooth 16", "Caries", "Restore with composite or GIC"),
-        ("Tooth 21", "Broken", "Crown or extraction"),
-        ("Tooth 11", "Missing", "Implant or bridge"),
-        ("Palate", "Oral Ulcer", "Topical gel + biopsy if persistent"),
-        ("Lower left region", "Oral Lesion", "Needs clinical evaluation")
-    ]
-    pdf.set_font("Arial", "", 12)
-    for tooth, issue, plan in diagnosis_data:
-        pdf.cell(0, 10, f"{tooth}: {issue} - Treatment: {plan}", ln=True)
+    # Patient Info
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(200, 10, txt="Patient Information", ln=True)
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(200, 7, txt=f"Name: {name}", ln=True)
+    pdf.cell(200, 7, txt=f"Age: {age}    Sex: {sex}", ln=True)
+    pdf.cell(200, 7, txt=f"Chief Complaint: {complaint}", ln=True)
+    pdf.multi_cell(200, 7, txt=f"Medical History: {history}")
+    pdf.cell(200, 7, txt=f"Date: {datetime.now().strftime('%d-%m-%Y %H:%M')}", ln=True)
+    pdf.ln(5)
 
-    # Add uploaded photos
-    for label, img_path in results:
-        pdf.add_page()
-        pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, label, ln=True)
-        try:
-            pdf.image(img_path, w=180)
-        except RuntimeError:
-            pdf.cell(0, 10, f"Could not load image: {label}", ln=True)
+    # Findings
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(200, 10, txt="Findings", ln=True)
+    pdf.set_font("Arial", "", 11)
+    if "predictions" in result_json and result_json["predictions"]:
+        for pred in result_json["predictions"]:
+            label = pred["class"]
+            x = int(pred["x"])
+            y = int(pred["y"])
+            pdf.cell(200, 6, txt=f"- {label.title()} detected at approx. position ({x}, {y})", ln=True)
+    else:
+        pdf.cell(200, 6, txt="No visible dental issues detected by AI.", ln=True)
 
-    # Legend (No emojis)
+    # Annotated Image
     pdf.ln(5)
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "Legend:", ln=True)
-    pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, 8,
-        "Red Area: Oral Ulcer\n"
-        "Green Area: Oral Lesion\n"
-        "Blue: Broken Tooth\n"
-        "X mark: Missing Tooth\n"
-        "Tooth Number: For reference"
-    )
+    pdf.cell(200, 10, txt="Uploaded Image", ln=True)
+    img_path = "/tmp/input.jpg"
+    input_image.save(img_path)
+    pdf.image(img_path, x=30, w=150)
 
     # Disclaimer
-    pdf.ln(5)
-    pdf.set_font("Arial", "I", 10)
-    pdf.multi_cell(0, 8,
-        "Disclaimer: This is an AI-generated simulated report. "
-        "Please consult your family oral and dental surgeon for confirmation and treatment."
-    )
+    pdf.set_font("Arial", "I", 9)
+    pdf.ln(10)
+    pdf.multi_cell(200, 5, txt="Disclaimer: This is an AI-assisted screening report. It is not a substitute for a clinical diagnosis. Please consult a qualified dental professional for confirmation and treatment.")
 
-    output_path = os.path.join(UPLOAD_DIR, "affodent_report.pdf")
-    pdf.output(output_path)
-    return output_path
+    return pdf.output(dest="S").encode("latin1")
 
-# Generate report
-if len(uploaded_images) >= 6:
-    st.success("Sufficient images uploaded.")
-    if st.button("Generate Report"):
-        pdf_path = generate_pdf(patient_name, uploaded_images)
-        with open(pdf_path, "rb") as f:
-            st.download_button("Download AffoDent Report", f, file_name="AffoDent_Oral_Report.pdf")
-else:
-    st.warning("Please upload at least 6 oral cavity photos to proceed.")
+# ----------------------
+# Main Execution
+# ----------------------
+if submit_btn:
+    if not name or not uploaded_image:
+        st.error("Please fill all required fields and upload an image.")
+    else:
+        with st.spinner("Processing image with AI..."):
+            img_bytes = uploaded_image.read()
+            result = run_inference(img_bytes)
+            image = Image.open(io.BytesIO(img_bytes))
+
+        st.success("✅ Analysis Complete!")
+
+        if "predictions" in result and result["predictions"]:
+            st.subheader("🔍 Detected Issues:")
+            for pred in result["predictions"]:
+                st.markdown(f"- **{pred['class'].title()}** at approx. position ({pred['x']}, {pred['y']})")
+        else:
+            st.markdown("No issues detected.")
+
+        # PDF Generation
+        st.subheader("📄 Download Report")
+        logo = Image.open(logo_file) if logo_file else None
+        pdf_bytes = generate_pdf(name, age, sex, chief_complaint, medical_history, result, image, logo)
+        st.download_button("📥 Download PDF Report", pdf_bytes, file_name=f"{name}_AffoDent_Report.pdf")

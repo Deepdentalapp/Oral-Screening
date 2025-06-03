@@ -5,16 +5,17 @@ from PIL import Image
 from fpdf import FPDF
 import datetime
 
-# Roboflow API configuration
+# Roboflow API config
 API_KEY = "yxVUJt7Trbkn6neMYEyB"
 MODEL_URL = "https://detect.roboflow.com/dental-lesion-detection-rf-4vstt/1"
 
-# App title
 st.set_page_config(page_title="AffoDent Oral Screening", layout="centered")
 st.title("AffoDent Oral Screening App")
-st.markdown("House no 4, College Hostel Road, Panbazar, Guwahati, Assam 781001  \n📞 +91 9864272102  \n📧 deep0701@gmail.com")
+st.markdown("House no 4, College Hostel Road, Panbazar, Guwahati, Assam 781001")
+st.markdown("Phone: +91 9864272102")
+st.markdown("Email: deep0701@gmail.com")
 
-# Patient details
+# Patient info
 st.subheader("Patient Details")
 patient_name = st.text_input("Patient Name")
 patient_age = st.text_input("Age")
@@ -27,46 +28,45 @@ uploaded_images = st.file_uploader("Upload Images", type=["jpg", "jpeg", "png"],
 
 if st.button("Generate AI Screening Report") and len(uploaded_images) >= 2:
     findings = []
-
     st.subheader("AI Analysis Results")
 
     for image_file in uploaded_images:
         image = Image.open(image_file).convert("RGB")
 
-        # Send image to Roboflow
+        # Convert to bytes
         buffered = io.BytesIO()
         image.save(buffered, format="JPEG")
         img_bytes = buffered.getvalue()
 
+        # Call Roboflow
         upload_url = f"{MODEL_URL}?api_key={API_KEY}"
-response = requests.post(
-    upload_url,
-    files={"file": ("image.jpg", img_bytes, "image/jpeg")},
-)
+        response = requests.post(
+            upload_url,
+            files={"file": ("image.jpg", img_bytes, "image/jpeg")}
+        )
 
         if response.status_code == 200:
             result = response.json()
             image_findings = []
 
-            for prediction in result["predictions"]:
-                label = prediction["class"]
-                x = int(prediction["x"])
-                y = int(prediction["y"])
-                tooth_info = f"Tooth (approx @ {x},{y})"
-                image_findings.append(f"{label.capitalize()} detected at {tooth_info}")
+            for prediction in result.get("predictions", []):
+                label = prediction.get("class", "Unknown")
+                x = int(prediction.get("x", 0))
+                y = int(prediction.get("y", 0))
+                image_findings.append(f"{label.capitalize()} detected near tooth at approx (x={x}, y={y})")
 
             if image_findings:
                 findings.extend(image_findings)
                 st.success(f"Findings in {image_file.name}:")
-                st.write(image_findings)
+                for line in image_findings:
+                    st.write(line)
             else:
-                st.warning(f"No findings detected in {image_file.name}.")
+                st.warning(f"No findings in {image_file.name}.")
         else:
-            st.error(f"Error processing {image_file.name}: {response.status_code}")
+            st.error(f"Error {response.status_code}: Failed to process {image_file.name}")
 
     # Generate PDF Report
     st.subheader("Download AI Report")
-
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)

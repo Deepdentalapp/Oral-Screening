@@ -1,51 +1,134 @@
+import streamlit as st
+import requests
+import tempfile
+from PIL import Image
 from fpdf import FPDF
-from io import BytesIO
+import os
 
-def safe_latin1(text):
-    return text.encode("latin-1", "replace").decode("latin-1")
+# Roboflow config
+API_KEY = "yxVUJt7Trbkn6neMYEyB"
+MODEL_URL = "https://detect.roboflow.com/dental-lesion-detection-rf-4vstt/1"
 
-def generate_pdf(name, age, sex, chief_complaint, medical_history, result, marked_image):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
+# Tooth-wise finding map
+FINDING_CLASSES = {
+    "carious": "Carious Tooth",
+    "broken": "Broken Crown",
+    "root": "Root Stamp",
+    "missing": "Missing Tooth",
+    "ulcer": "Ulcer",
+    "lesion": "Oral Lesion",
+    "stain": "Tooth Stain",
+    "calculus": "Calculus"
+}
 
-    # Title
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, txt="AffoDent Oral Screening Report", ln=True, align='C')
+st.set_page_config(page_title="AffoDent Oral Screening", layout="wide")
 
-    pdf.set_font("Arial", size=12)
-    pdf.ln(10)
+st.title("AffoDent Dental Screening App")
 
-    # Patient Info
-    pdf.cell(200, 10, txt="Patient Information", ln=True, align='L')
-    pdf.cell(200, 10, txt=f"Name: {safe_latin1(name)}", ln=True)
-    pdf.cell(200, 10, txt=f"Age: {safe_latin1(age)}", ln=True)
-    pdf.cell(200, 10, txt=f"Sex: {safe_latin1(sex)}", ln=True)
-    pdf.cell(200, 10, txt=f"Chief Complaint: {safe_latin1(chief_complaint)}", ln=True)
-    pdf.multi_cell(0, 10, txt=f"Medical History: {safe_latin1(medical_history)}")
+st.write("Please upload **at least 2**, ideally 6 dental photographs:")
 
-    pdf.ln(5)
+image_files = []
+required_images = [
+    "Frontal View (Front Teeth)",
+    "Right Lateral View",
+    "Left Lateral View",
+    "Upper Occlusal View",
+    "Lower Occlusal View",
+    "Tongue / Palate View"
+]
 
-    # Results
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(200, 10, txt="Findings:", ln=True)
-    pdf.set_font("Arial", size=12)
-    pdf.multi_cell(0, 10, txt=safe_latin1(result))
+for label in required_images:
+    uploaded = st.file_uploader(f"Upload: {label}", type=["jpg", "jpeg", "png"], key=label)
+    if uploaded:
+        image_files.append((label, uploaded))
 
-    pdf.ln(5)
+if len(image_files) < 2:
+    st.warning("Please upload at least 2 images.")
+    st.stop()
 
-    # Image
-    if marked_image:
-        import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
-            marked_image.save(tmpfile.name)
-            pdf.image(tmpfile.name, x=10, y=None, w=180)
+# Patient details
+st.subheader("Patient Information")
+patient_name = st.text_input("Name")
+age = st.text_input("Age")
+sex = st.selectbox("Sex", ["Male", "Female", "Other"])
+chief_complaint = st.text_area("Chief Complaint")
+medical_history = st.text_area("Medical History")
 
-    # Disclaimer
-    pdf.ln(10)
-    pdf.set_font("Arial", size=8)
-    pdf.multi_cell(0, 8, txt=safe_latin1("This is an AI-generated screening report. Please consult a licensed dentist for clinical diagnosis and treatment."))
+if not patient_name or not age or not chief_complaint:
+    st.warning("Please fill out all required patient information fields.")
+    st.stop()
 
-    # Return as bytes
-    return pdf.output(dest="S").encode("latin1", "replace")
+st.success("Images and information ready. Click below to analyze and generate report.")
+
+if st.button("Run AI Analysis and Generate PDF Report"):
+    with st.spinner("Analyzing images..."):
+        results = []
+
+        for label, file in image_files:
+            img = Image.open(file)
+            img_bytes = file.read()
+
+            response = requests.post(
+                MODEL_URL,
+                params={"api_key": API_KEY},
+                files={"file": img_bytes}
+            )
+
+            preds = []
+            if response.status_code == 200:
+                detections = response.json()["predictions"]
+                for det in detections:
+                    class_name = det["class"]
+                    confidence = round(det["confidence"] * 100, 2)
+                    tooth_number = det.get("x")  # Simulated for now
+                    preds.append(f"{FINDING_CLASSES.get(class_name, class_name)} (approx. Tooth No: {int(tooth_number/10)}) - {confidence}%")
+            else:
+                preds.append("Failed to analyze image.")
+
+            results.append({
+                "view": label,
+                "filename": file.name,
+                "findings": preds
+            })
+
+        # Generate PDF
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(200, 10, "AffoDent Dental Screening Report", ln=True, align="C")
+
+        pdf.set_font("Arial", "", 12)
+        pdf.ln(5)
+        pdf.cell(0, 10, f"Patient Name: {patient_name}", ln=True)
+        pdf.cell(0, 10, f"Age: {age}", ln=True)
+        pdf.cell(0, 10, f"Sex: {sex}", ln=True)
+        pdf.cell(0, 10, f"Chief Complaint: {chief_complaint}", ln=True)
+        pdf.multi_cell(0, 10, f"Medical History: {medical_history}")
+
+        pdf.ln(5)
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "AI Findings:", ln=True)
+
+        for res in results:
+            pdf.set_font("Arial", "B", 12)
+            pdf.cell(0, 10, f"{res['view']}", ln=True)
+            pdf.set_font("Arial", "", 12)
+            for finding in res['findings']:
+                pdf.cell(0, 10, f"- {finding}", ln=True)
+
+        pdf.ln(10)
+        pdf.set_font("Arial", "I", 10)
+        pdf.multi_cell(0, 10, "Disclaimer: This is an automated preliminary dental screening report generated by AI. Please consult a licensed dentist for final diagnosis and treatment.")
+
+        pdf.ln(5)
+        pdf.set_font("Arial", "", 10)
+        pdf.cell(0, 10, "AffoDent Panbazar Dental Clinic", ln=True)
+        pdf.cell(0, 10, "House no 4, College Hostel Road, Panbazar, Guwahati, Assam 781001", ln=True)
+        pdf.cell(0, 10, "Contact: +91 9864272102 | Email: deep0701@gmail.com", ln=True)
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            pdf.output(tmp.name)
+            st.success("Report generated!")
+            with open(tmp.name, "rb") as f:
+                st.download_button("Download Report", f, file_name="AffoDent_Report.pdf")
         

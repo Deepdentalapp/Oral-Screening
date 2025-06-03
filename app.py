@@ -38,11 +38,11 @@ if st.button("Generate AI Screening Report") and len(uploaded_images) >= 2:
         image.save(buffered, format="JPEG")
         img_bytes = buffered.getvalue()
 
-        response = requests.post(
-            MODEL_URL,
-            params={"api_key": API_KEY},
-            files={"file": img_bytes},
-        )
+        upload_url = f"{MODEL_URL}?api_key={API_KEY}"
+response = requests.post(
+    upload_url,
+    files={"file": ("image.jpg", img_bytes, "image/jpeg")},
+)
 
         if response.status_code == 200:
             result = response.json()
